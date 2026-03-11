@@ -1,6 +1,6 @@
 #include <libCacheSim.h>
 
-#include <iostream>
+#include <iterator>
 #include <list>
 #include <unordered_map>
 
@@ -8,22 +8,31 @@ class LRUCache {
  private:
   uint64_t cache_size_;
 
-  std::unordered_map<obj_id_t, std::list<obj_id_t>::iterator> mp_;
+  std::unordered_map<obj_id_t, std::list<obj_id_t>::iterator> pos_;
   std::list<obj_id_t> list_;
 
  public:
   LRUCache(uint64_t capacity) : cache_size_(capacity) {}
 
   void on_hit(obj_id_t id) {
-    auto &iter = mp_[id];
-    list_.splice(list_.end(), list_, iter);
+    auto it = pos_.find(id);
+    if (it == pos_.end()) {
+      return;
+    }
+    list_.splice(list_.end(), list_, it->second);
   }
 
   void on_miss(obj_id_t id, uint64_t sz) {
     if (sz > cache_size_) return;
 
+    auto existing = pos_.find(id);
+    if (existing != pos_.end()) {
+      list_.splice(list_.end(), list_, existing->second);
+      return;
+    }
+
     list_.push_back(id);
-    mp_[id] = list_.end();
+    pos_[id] = std::prev(list_.end());
   }
 
   obj_id_t evict() {
@@ -33,15 +42,18 @@ class LRUCache {
 
     obj_id_t victim = list_.front();
     list_.pop_front();
-    mp_.erase(victim);
+    pos_.erase(victim);
 
     return victim;
   }
 
   void on_remove(obj_id_t id) {
-    auto &iter = mp_[id];
-    list_.erase(iter);
-    mp_.erase(id);
+    auto it = pos_.find(id);
+    if (it == pos_.end()) {
+      return;
+    }
+    list_.erase(it->second);
+    pos_.erase(it);
   }
 };
 
