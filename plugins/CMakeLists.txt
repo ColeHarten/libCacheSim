@@ -4,7 +4,7 @@ project(plugins CXX C)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GLIB REQUIRED glib-2.0)
 
-set(PLUGINS fifo lru rr gdsf)  # Add more plugins here when you create them
+set(PLUGINS fifo lru rr gdsf pred)  # Add more plugins here when you create them
 
 foreach(plugin IN LISTS PLUGINS)
   add_library(plugin_${plugin} SHARED plugin_${plugin}.cpp)
