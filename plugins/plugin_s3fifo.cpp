@@ -140,8 +140,6 @@ class S3FifoCache {
 
  public:
   explicit S3FifoCache(uint64_t capacity) : cache_size_(capacity) {
-    // Tunable static sizes.
-    // Small queue intentionally small; ghost moderate.
     constexpr size_t kResidentSlots = 100000;
     small_target_ = std::max<size_t>(1, kResidentSlots / 10);  // 10%
     main_target_ = kResidentSlots - small_target_;             // 90%
