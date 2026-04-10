@@ -106,8 +106,7 @@ class WTinyLFUCache {
   std::unordered_map<obj_id_t, Entry> entries_;
   CountMinSketch sketch_;
 
-  // Tune this: higher alpha penalizes large objects more.
-  static constexpr double kSizeAlpha = 0.5;
+  static constexpr double kSizeAlpha = 0.6;
 
   static constexpr double kWindowFrac = 0.02;     // 2% window
   static constexpr double kProtectedFrac = 0.80;  // 80% of main is protected
@@ -197,7 +196,6 @@ class WTinyLFUCache {
     double cand_score = score(cand_id, cand_size);
     double victim_score = score(victim_id, victim_size);
 
-    // Slight bias toward incumbents to reduce churn.
     return cand_score >= victim_score * 0.95;
   }
 
@@ -255,8 +253,6 @@ class WTinyLFUCache {
       return;
     }
 
-    // If simulator somehow reports a miss for something already present,
-    // ignore.
     if (entries_.find(id) != entries_.end()) {
       return;
     }
@@ -266,15 +262,12 @@ class WTinyLFUCache {
     entries_[id] = e;
     used_bytes_ += size;
 
-    // New objects always enter the window.
     insert_front(id, Segment::WINDOW);
   }
 
   obj_id_t evict() {
-    // First keep protected within its target.
     ensure_protected_limit();
 
-    // If the window is too large, its LRU candidate tries to enter probation.
     while (window_bytes_ > window_target_ && !window_.empty()) {
       obj_id_t cand = window_.back();
       auto eit = entries_.find(cand);
@@ -319,18 +312,12 @@ class WTinyLFUCache {
       }
     }
 
-    // If still over capacity, evict in this order:
-    // 1. probation LRU
-    // 2. window LRU
-    // 3. protected LRU
     if (used_bytes_ > cache_size_) {
       if (!probation_.empty()) return evict_probation_lru();
       if (!window_.empty()) return evict_window_lru();
       if (!protected_.empty()) return evict_protected_lru();
     }
 
-    // Defensive fallback in case simulator calls eviction when not strictly
-    // needed.
     if (!probation_.empty()) return evict_probation_lru();
     if (!window_.empty()) return evict_window_lru();
     if (!protected_.empty()) return evict_protected_lru();
