@@ -19,7 +19,6 @@ class S3SieveCache {
 
   std::unordered_map<obj_id_t, Entry> entries_;
 
-  // FIFO queues: newest at back, oldest at front.
   std::list<obj_id_t> q1_;
   std::list<obj_id_t> q2_;
   std::list<obj_id_t> q3_;
@@ -113,8 +112,6 @@ class S3SieveCache {
     insert_back(id, new_seg);
   }
 
-  // Oldest item in Q1 either dies or gets promoted.
-  // Returns victim ID only if something is actually evicted.
   obj_id_t process_q1_overflow() {
     if (q1_bytes_ <= q1_target_ || q1_.empty()) return 0;
 
@@ -133,8 +130,6 @@ class S3SieveCache {
     return erase_entry(id);
   }
 
-  // SIEVE-style processing in Q2.
-  // Oldest item gets one second chance; stronger items can graduate to Q3.
   obj_id_t process_q2_overflow() {
     if (q2_bytes_ <= q2_target_ || q2_.empty()) return 0;
 
@@ -161,7 +156,6 @@ class S3SieveCache {
     return erase_entry(id);
   }
 
-  // SIEVE-style processing in Q3.
   obj_id_t process_q3_overflow() {
     if (q3_bytes_ <= q3_target_ || q3_.empty()) return 0;
 
@@ -180,7 +174,7 @@ class S3SieveCache {
   }
 
   obj_id_t force_global_eviction() {
-    // Prefer evicting from lower-value regions first.
+    // Prefer evicting from lower-value regions first
     if (!q1_.empty()) {
       obj_id_t id = q1_.front();
       auto mit = entries_.find(id);
@@ -235,12 +229,8 @@ class S3SieveCache {
 
  public:
   explicit S3SieveCache(uint64_t cache_size) : cache_size_(cache_size) {
-    // Hyperparameters to tune:
-    // q1_frac in {0.04, 0.08, 0.12, 0.16}
-    // q2_frac in {0.16, 0.24, 0.32}
-    // q3 is the remainder
     const double q1_frac = 0.08;
-    const double q2_frac = 0.24;
+    const double q2_frac = 0.16;
 
     q1_target_ = std::max<uint64_t>(1, frac_bytes(cache_size_, q1_frac));
     q2_target_ = std::max<uint64_t>(1, frac_bytes(cache_size_, q2_frac));
@@ -275,7 +265,6 @@ class S3SieveCache {
   }
 
   obj_id_t evict() {
-    // First, try to restore queue-local targets without evicting if possible.
     while (true) {
       bool progressed = false;
       obj_id_t victim = 0;
@@ -301,20 +290,16 @@ class S3SieveCache {
       if (!progressed) break;
     }
 
-    // If total bytes are still over capacity, force a global eviction.
     while (used_bytes_ > cache_size_) {
       obj_id_t victim = force_global_eviction();
       if (victim != 0) return victim;
 
-      // Defensive fallback: hard-evict oldest from any non-empty queue.
       if (!q1_.empty()) return erase_entry(q1_.front());
       if (!q2_.empty()) return erase_entry(q2_.front());
       if (!q3_.empty()) return erase_entry(q3_.front());
       return 0;
     }
 
-    // Defensive behavior if simulator asks for eviction when not strictly
-    // needed.
     if (!q1_.empty()) return erase_entry(q1_.front());
     if (!q2_.empty()) return erase_entry(q2_.front());
     if (!q3_.empty()) return erase_entry(q3_.front());
